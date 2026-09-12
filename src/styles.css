@@ -2513,6 +2513,27 @@ body.is-dragging * {
   line-height: 1.5;
 }
 
+/* 定義リスト全体の余白リセット */
+.help-tool-subtypes {
+  margin: 0.8rem 0 0 0;
+}
+
+/* 見出し部分（・手書き線 など）を白い文字色にする */
+.help-tool-subtypes dt {
+  color: var(--text-heading);
+  font-weight: bold;
+  font-size: 0.85rem;
+  margin-top: 0.6rem;
+}
+
+/* 説明文の余計なインデント（左隙間）を消去する */
+.help-tool-subtypes dd {
+  margin-left: 0;
+  font-size: 0.85rem;
+  color: var(--text-color);
+  line-height: 1.5;
+}
+
 /* ボタン説明リスト */
 .help-button-descriptions {
   display: flex;
