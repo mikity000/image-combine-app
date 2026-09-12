@@ -3,7 +3,9 @@ import { Size, Point } from './common';
 
 export type PaintMediaType = 'image' | 'pdf' | null;
 
-export type PaintToolType = 'pen' | 'highlighter' | 'eraser' | 'bucket' | 'smart_fill';
+export type PaintToolType = 'pen' | 'highlighter' | 'eraser' | 'bucket';
+
+export type FillMode = 'handwriting' | 'image_object' | 'combined';
 
 export type EraserMode = 'pixel' | 'stroke';
 
@@ -43,6 +45,8 @@ export interface UsePaintCanvasReturn {
   canvasDimensions: Size;
   activeTool: PaintToolType;
   setActiveTool: React.Dispatch<React.SetStateAction<PaintToolType>>;
+  fillMode: FillMode;
+  setFillMode: React.Dispatch<React.SetStateAction<FillMode>>;
   eraserMode: EraserMode;
   setEraserMode: React.Dispatch<React.SetStateAction<EraserMode>>;
   color: string;

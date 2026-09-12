@@ -2138,6 +2138,43 @@ body.is-dragging * {
   box-shadow: 0 0 10px rgba(102, 252, 241, 0.15);
 }
 
+/* 塗りつぶしモード切り替えボタン */
+.paint-fill-mode-buttons {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.btn-fill-mode {
+  padding: 7px 4px;
+  font-size: 0.76rem;
+  font-weight: 500;
+  border-radius: var(--border-radius-sm);
+  background: var(--box-bg);
+  border: 1px solid var(--box-border);
+  color: var(--text-color);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.btn-fill-mode:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-heading);
+}
+
+.btn-fill-mode.is-active {
+  background: var(--nav-active-bg);
+  border-color: var(--accent-color);
+  color: var(--accent-color);
+  font-weight: 600;
+  box-shadow: 0 0 10px rgba(102, 252, 241, 0.15);
+}
+
 /* ==========================================================================
    Help Modal & Documentation Styles
    ========================================================================== */

@@ -5,6 +5,7 @@
  * 3. モルフォロジー閉処理による全メディア（手書き・画像・PDF）対応の隙間閉じエンジン
  */
 import { PAINT_CONFIG } from '../constants/Constants';
+import { FillMode } from '../types/paint';
 
 export interface RgbaColor {
   r: number;
@@ -268,10 +269,11 @@ export function closeMask(mask: Uint8Array, width: number, height: number, radiu
 }
 
 /**
- * 手書き線・画像・PDFの全境界を統合し、隙間（gapClosing px）を塞いだバリアマップを生成します。
+ * 手書き線・画像・PDFの境界を抽出し、隙間（gapClosing px）を塞いだバリアマップを生成します。
+ * pDataまたはbgDataにnullを渡すことで、特定の境界のみを選択的に利用可能です。
  */
 function createClosedBarrierMap(
-  pData: Uint8ClampedArray,
+  pData: Uint8ClampedArray | null | undefined,
   bgData: Uint8ClampedArray | null | undefined,
   width: number,
   height: number,
@@ -323,10 +325,11 @@ function createClosedBarrierMap(
 }
 
 /**
- * 手書き線・図形の塗りつぶし (Scanline Flood Fill ＋ 隙間閉じ機能)
+ * 手書き線で囲まれた閉じたエリアの内側をクリックして塗りつぶす機能 (Scanline Flood Fill ＋ 手書き隙間閉じ)
+ * 背景画像は参照せず、手書き線の境界のみを対象にします。
  */
 export function performFloodFill(
-  bgCanvas: HTMLCanvasElement | null | undefined,
+  _bgCanvas: HTMLCanvasElement | null | undefined,
   paintCanvas: HTMLCanvasElement,
   startX: number,
   startY: number,
@@ -349,9 +352,6 @@ export function performFloodFill(
   const paintImgData = paintCtx.getImageData(0, 0, width, height);
   const pData = paintImgData.data;
 
-  const bgImgData = bgCanvas ? getBgImageData(bgCanvas, width, height) : null;
-  const bgData = bgImgData ? bgImgData.data : null;
-
   const seedIndex = (y * width + x) * 4;
   const seedR = pData[seedIndex];
   const seedG = pData[seedIndex + 1];
@@ -372,10 +372,10 @@ export function performFloodFill(
   const isBlankArea = seedA < strokeWallAlpha;
   const maxDistance = (tolerancePercent / 100) * 160;
 
-  // 隙間閉じが有効な場合、手書き＋背景の途切れた線（開口部のみ）を接続したバリアマップを生成
+  // 隙間閉じが有効な場合、手書き線の途切れた開口部のみを接続したバリアマップを生成 (背景画像は無視)
   let barrierMap: Uint8Array | null = null;
   if (gapClosing > 0 && isBlankArea) {
-    barrierMap = createClosedBarrierMap(pData, bgData, width, height, gapClosing);
+    barrierMap = createClosedBarrierMap(pData, null, width, height, gapClosing);
   }
 
   // ピクセル通過判定
@@ -408,7 +408,8 @@ export function performFloodFill(
 }
 
 /**
- * AI・画像処理による任意オブジェクト・閉曲線の輪郭ペン線描画＋バケツ塗りつぶし連携 (Smart Object Fill ＋ 隙間閉じ)
+ * 画像内のオブジェクト輪郭自動認識による塗りつぶし (Smart Object Fill ＋ 隙間閉じ)
+ * @param includeHandwriting 手書き線も境界として認識するかどうか (false: 画像オブジェクトのみ, true: 手書き線＋画像の両方認識)
  */
 export function performSmartObjectFill(
   bgCanvas: HTMLCanvasElement | null | undefined,
@@ -418,7 +419,8 @@ export function performSmartObjectFill(
   fillColor: string,
   tolerancePercent: number = 30,
   opacityPercent: number = 100,
-  gapClosing: number = (PAINT_CONFIG.DEFAULT_GAP_CLOSING as number)
+  gapClosing: number = (PAINT_CONFIG.DEFAULT_GAP_CLOSING as number),
+  includeHandwriting: boolean = false
 ): boolean {
   const width = paintCanvas.width;
   const height = paintCanvas.height;
@@ -448,10 +450,16 @@ export function performSmartObjectFill(
   const maxColorDist = (tolerancePercent / 100) * 160;
   const edgeBarrierThreshold = 28 + (100 - tolerancePercent) * 0.8;
 
-  // 隙間閉じバリアマップ
+  // 隙間閉じバリアマップ (includeHandwriting が有効な場合は手書きストロークもバリアに含める)
   let barrierMap: Uint8Array | null = null;
   if (gapClosing > 0) {
-    barrierMap = createClosedBarrierMap(pData, data, width, height, gapClosing);
+    barrierMap = createClosedBarrierMap(
+      includeHandwriting ? pData : null,
+      data,
+      width,
+      height,
+      gapClosing
+    );
   }
 
   const regionMask = new Uint8Array(width * height);
@@ -511,7 +519,8 @@ export function performSmartObjectFill(
 
       const nIdx = pos * 4;
 
-      if (pData[nIdx + 3] >= strokeWallAlpha) {
+      // 手書き線の考慮 (includeHandwriting が true の場合のみ手書き線を遮断壁とする)
+      if (includeHandwriting && pData[nIdx + 3] >= strokeWallAlpha) {
         visited[pos] = 1;
         continue;
       }
@@ -584,7 +593,8 @@ export function performSmartObjectFill(
   // 3. 領域内部へのスキャンライン塗りつぶし
   const canFloodPass = (fx: number, fy: number): boolean => {
     const fpos = fy * width + fx;
-    return pData[fpos * 4 + 3] < strokeWallAlpha && regionMask[fpos] === 1;
+    if (includeHandwriting && pData[fpos * 4 + 3] >= strokeWallAlpha) return false;
+    return regionMask[fpos] === 1;
   };
 
   let startFloodX = x;
@@ -682,3 +692,61 @@ function applyMaskToPaintCanvas(paintCanvas: HTMLCanvasElement, mask: Uint8Array
 
   ctx.putImageData(paintImgData, 0, 0);
 }
+
+/**
+ * 統合塗りつぶし実行関数
+ * 1. 'handwriting': 手書き線で囲まれた閉じたエリアの内側をクリックして塗りつぶす機能 (背景画像は無視)
+ * 2. 'image_object': 画像内のオブジェクトをクリックすると、輪郭境界を自動認識して塗りつぶす機能 (手書き線は無視)
+ * 3. 'combined': 手書き線と画像内のオブジェクトの両方を認識して塗りつぶす機能
+ */
+export function performUnifiedFill(
+  bgCanvas: HTMLCanvasElement | null | undefined,
+  paintCanvas: HTMLCanvasElement,
+  startX: number,
+  startY: number,
+  fillColor: string,
+  fillMode: FillMode,
+  tolerancePercent: number = 25,
+  opacityPercent: number = 100,
+  gapClosing: number = (PAINT_CONFIG.DEFAULT_GAP_CLOSING as number)
+): boolean {
+  if (fillMode === 'handwriting') {
+    return performFloodFill(
+      null, // 背景画像は参照しない
+      paintCanvas,
+      startX,
+      startY,
+      fillColor,
+      tolerancePercent,
+      opacityPercent,
+      PAINT_CONFIG.FLOOD_FILL_EXPAND_RADIUS,
+      gapClosing
+    );
+  } else if (fillMode === 'image_object') {
+    return performSmartObjectFill(
+      bgCanvas,
+      paintCanvas,
+      startX,
+      startY,
+      fillColor,
+      tolerancePercent,
+      opacityPercent,
+      gapClosing,
+      false // 手書き線は無視
+    );
+  } else {
+    // 'combined' (手書き線と画像オブジェクトの両方を認識)
+    return performSmartObjectFill(
+      bgCanvas,
+      paintCanvas,
+      startX,
+      startY,
+      fillColor,
+      tolerancePercent,
+      opacityPercent,
+      gapClosing,
+      true // 手書き線も画像オブジェクトも両方認識
+    );
+  }
+}
+

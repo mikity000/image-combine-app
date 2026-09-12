@@ -4,7 +4,6 @@ import {
   Highlighter,
   Eraser,
   PaintBucket,
-  Sparkles,
   Undo2,
   Redo2,
   Trash2,
@@ -24,7 +23,7 @@ import { useGallery } from '../context/GalleryContext';
 import SidebarTray from './SidebarTray';
 import { PAINT_CONFIG } from '../constants/Constants';
 import { getSequentialName } from '../utils/imageUtils';
-import { PaintToolType, EraserMode } from '../types/paint';
+import { PaintToolType, FillMode, EraserMode } from '../types/paint';
 import { GalleryImage } from '../types/gallery';
 import { TrayItemData } from '../types/ui';
 
@@ -40,8 +39,20 @@ const TOOLS: PaintToolDef[] = [
   { id: 'pen', label: 'ペン', icon: Pencil, title: '通常ペン' },
   { id: 'highlighter', label: '蛍光ペン', icon: Highlighter, title: '蛍光ペン' },
   { id: 'eraser', label: '消しゴム', icon: Eraser, title: '消しゴム' },
-  { id: 'bucket', label: 'バケツ', icon: PaintBucket, title: 'バケツ塗りつぶし (手書き線・閉曲線)' },
-  { id: 'smart_fill', label: 'スマート', icon: Sparkles, title: 'スマート塗りつぶし (AI・輪郭自動認識)' },
+  { id: 'bucket', label: '塗りつぶし', icon: PaintBucket, title: '塗りつぶし (手書き線 / 画像オブジェクト / 両方認識)' },
+];
+
+interface FillModeDef {
+  id: FillMode;
+  label: string;
+  title: string;
+}
+
+// 塗りつぶしモード定義
+const FILL_MODES: FillModeDef[] = [
+  { id: 'handwriting', label: '手書き線', title: '手書き線で囲まれた閉じたエリアの内側を塗りつぶします' },
+  { id: 'image_object', label: '画像オブジェクト', title: '画像内のオブジェクトをクリックして輪郭境界を自動認識して塗りつぶします' },
+  { id: 'combined', label: '手書き＋画像', title: '手書き線と画像内のオブジェクトの両方を認識して塗りつぶします' },
 ];
 
 interface EraserModeDef {
@@ -71,6 +82,8 @@ export default function PaintComponent() {
     canvasDimensions,
     activeTool,
     setActiveTool,
+    fillMode,
+    setFillMode,
     eraserMode,
     setEraserMode,
     color,
@@ -604,12 +617,32 @@ export default function PaintComponent() {
                   </div>
                 )}
 
-                {/* 塗りつぶし設定 (バケツ・スマート塗りつぶし用) */}
-                {(activeTool === 'bucket' || activeTool === 'smart_fill') && (
+                {/* 塗りつぶしタイプ設定 (塗りつぶしツール選択時) */}
+                {activeTool === 'bucket' && (
+                  <div className="control-group">
+                    <label className="control-label">塗りつぶしタイプ</label>
+                    <div className="paint-fill-mode-buttons">
+                      {FILL_MODES.map((mode) => (
+                        <button
+                          key={mode.id}
+                          type="button"
+                          className={`btn-fill-mode ${fillMode === mode.id ? 'is-active' : ''}`}
+                          onClick={() => setFillMode(mode.id)}
+                          title={mode.title}
+                        >
+                          {mode.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* 塗りつぶし設定 (許容度・不透明度・線の途切れ許容) */}
+                {activeTool === 'bucket' && (
                   <div className="control-group">
                     <div className="control-label-row">
                       <label className="control-label">
-                        {activeTool === 'smart_fill' ? '輪郭認識感度 (許容度)' : '塗りつぶし許容度'}
+                        {fillMode === 'handwriting' ? '塗りつぶし許容度' : '輪郭認識感度 (許容度)'}
                       </label>
                       <span className="control-value">{tolerance}%</span>
                     </div>

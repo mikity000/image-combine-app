@@ -1,6 +1,5 @@
 import { useState, useCallback } from 'react';
-import { PDFDocument, PDFName, PDFRawStream } from 'pdf-lib';
-import { fileToDataUrl } from '../utils/imageUtils';
+import { loadPdfDocument, renderPdfPage } from '../utils/pdfRenderUtils';
 import { PDF_CONFIG } from '../constants/Constants';
 
 export interface ExtractedPdfImage {
@@ -45,48 +44,43 @@ export function usePdfExtractor(): UsePdfExtractorReturn {
         const currentPdfImages: ExtractedPdfImage[] = [];
 
         try {
-          const arrayBuffer = await file.arrayBuffer();
-          const pdfDoc = await PDFDocument.load(arrayBuffer);
-          const indirectObjects = pdfDoc.context.enumerateIndirectObjects();
+          // PDF.js を用いてPDFドキュメントを読み込み
+          const { pdfDoc, numPages } = await loadPdfDocument(file);
 
-          const imageObjects: PDFRawStream[] = [];
-          indirectObjects.forEach(([, obj]) => {
-            if (obj instanceof PDFRawStream) {
-              const subtype = obj.dict.get(PDFName.of('Subtype'));
-              if (subtype === PDFName.of('Image')) {
-                imageObjects.push(obj);
-              }
-            }
-          });
-
-          const totalImagesInFile = imageObjects.length;
-          if (totalImagesInFile === 0) {
-            console.warn(`「${file.name}」から抽出可能な画像は見つかりませんでした。`);
+          if (numPages === 0) {
+            console.warn(`「${file.name}」にはページが存在しません。`);
           } else {
-            for (let i = 0; i < totalImagesInFile; i++) {
-              const obj = imageObjects[i];
-              const imageBytes = obj.contents;
-              const blob = new Blob([imageBytes as any], { type: 'image/jpeg' });
+            const baseName = file.name.replace(/\.[^/.]+$/, '');
 
-              const dataUrl = await fileToDataUrl(blob);
-              const fileName =
-                totalFiles > 1 ? `${file.name.replace(/\.[^/.]+$/, '')}_${i + 1}.jpg` : `${i + 1}.jpg`;
-              const extractedFile = new File([blob], fileName, { type: 'image/jpeg' });
-
-              currentPdfImages.push({
-                id: `extracted-${Date.now()}-${f}-${i}-${Math.random().toString(36).slice(2, 9)}`,
-                file: extractedFile,
-                name: extractedFile.name,
-                dataUrl,
+            for (let pageNum = 1; pageNum <= numPages; pageNum++) {
+              // 1ページ＝1画像として白背景・高解像度（scale: 2.0）・JPEG形式でレンダリング
+              const rendered = await renderPdfPage(pdfDoc, pageNum, {
+                scale: 2.0,
+                backgroundColor: '#ffffff',
+                format: 'image/jpeg',
+                quality: 0.92,
               });
 
-              const currentFileProgress = (i + 1) / totalImagesInFile;
+              const fileName =
+                totalFiles > 1 ? `${baseName}_${pageNum}.jpg` : `${pageNum}.jpg`;
+              const extractedFile = new File([rendered.blob], fileName, { type: 'image/jpeg' });
+
+              currentPdfImages.push({
+                id: `extracted-${Date.now()}-${f}-${pageNum}-${Math.random().toString(36).slice(2, 9)}`,
+                file: extractedFile,
+                name: extractedFile.name,
+                dataUrl: rendered.dataUrl,
+              });
+
+              // ファイル内ページ進捗と全体進捗の算出
+              const currentFileProgress = pageNum / numPages;
               const overallProgress = Math.round(
                 ((completedFiles + currentFileProgress) / totalFiles) * 100
               );
               setExtractProgress(overallProgress);
 
-              if ((i + 1) % UI_YIELD_INTERVAL === 0 || i + 1 === totalImagesInFile) {
+              // UIフリーズ防止のための待機
+              if (pageNum % UI_YIELD_INTERVAL === 0 || pageNum === numPages) {
                 await new Promise((resolve) => setTimeout(resolve, 0));
               }
             }

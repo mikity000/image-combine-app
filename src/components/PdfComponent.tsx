@@ -55,6 +55,8 @@ export default function PdfComponent() {
 
   const [images, setImages] = useState<PdfPageItem[]>([]);
   const [selectedImages, setSelectedImages] = useState<Set<string>>(new Set());
+  const [lastSelectedId, setLastSelectedId] = useState<string | null>(null);
+  const baseSelectedRef = useRef<Set<string>>(new Set());
   const [activeId, setActiveId] = useState<string | null>(null);
   const [dragStartRect, setDragStartRect] = useState<{ width: number; height: number } | null>(null);
   const dragStartOffsetRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
@@ -249,31 +251,63 @@ export default function PdfComponent() {
     }
   }, []);
 
-  // 画像選択（単一・Ctrl/Cmd複数選択）
+  // 画像選択（単一・Ctrl/Cmd複数選択・Shift範囲選択）
   const selectImage = useCallback((id: string, event?: React.MouseEvent) => {
-    const isMultiSelect = event && (event.ctrlKey || event.metaKey);
-    setSelectedImages((prevSelected) => {
-      if (isMultiSelect) {
+    if (event?.shiftKey && lastSelectedId) {
+      // Shift+クリック: 起点から現在位置までの範囲選択（直前のベース選択を保持して合算）
+      const allIds = images.map(img => img.id);
+      const lastIndex = allIds.indexOf(lastSelectedId);
+      const currentIndex = allIds.indexOf(id);
+
+      if (lastIndex !== -1 && currentIndex !== -1) {
+        const start = Math.min(lastIndex, currentIndex);
+        const end = Math.max(lastIndex, currentIndex);
+        const rangeIds = allIds.slice(start, end + 1);
+
+        // baseSelectedRef（Ctrl選択等で確定していた選択状態）に範囲アイテムを追加
+        const newSelected = new Set(baseSelectedRef.current);
+        rangeIds.forEach(rangeId => newSelected.add(rangeId));
+        setSelectedImages(newSelected);
+      } else {
+        const newSelected = new Set([id]);
+        setSelectedImages(newSelected);
+        setLastSelectedId(id);
+        baseSelectedRef.current = newSelected;
+      }
+    } else if (event && (event.ctrlKey || event.metaKey)) {
+      // Ctrl/Cmd+クリック: 選択のトグル
+      setSelectedImages((prevSelected) => {
         const newSelected = new Set(prevSelected);
         if (newSelected.has(id)) {
           newSelected.delete(id);
         } else {
           newSelected.add(id);
         }
+        baseSelectedRef.current = newSelected;
         return newSelected;
-      }
-      return new Set([id]);
-    });
-  }, []);
+      });
+      setLastSelectedId(id);
+    } else {
+      // 通常クリック: 単一選択
+      const newSelected = new Set([id]);
+      setSelectedImages(newSelected);
+      setLastSelectedId(id);
+      baseSelectedRef.current = newSelected;
+    }
+  }, [images, lastSelectedId]);
 
   const deleteSelected = useCallback(() => {
     setImages(prev => prev.filter((i) => !selectedImages.has(i.id)));
     setSelectedImages(new Set());
+    setLastSelectedId(null);
+    baseSelectedRef.current = new Set();
   }, [selectedImages]);
 
   const resetImages = useCallback(() => {
     setImages([]);
     setSelectedImages(new Set());
+    setLastSelectedId(null);
+    baseSelectedRef.current = new Set();
   }, []);
 
   const handleGeneratePdf = useCallback(() => {

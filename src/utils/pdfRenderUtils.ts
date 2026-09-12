@@ -73,30 +73,60 @@ export async function loadPdfDocument(fileOrBuffer: File | Blob | ArrayBuffer): 
   };
 }
 
+export interface RenderPdfPageOptions {
+  scale?: number;
+  backgroundColor?: string;
+  format?: 'image/jpeg' | 'image/png';
+  quality?: number;
+}
+
 export interface RenderedPdfPage {
   dataUrl: string;
+  blob: Blob;
   width: number;
   height: number;
 }
 
 /**
- * 指定したページ番号の PDF ページを Canvas にレンダリングし、DataURL を返します。
+ * 指定したページ番号の PDF ページを Canvas にレンダリングし、DataURL と Blob を返します。
  * @param pdfDoc PDFDocumentProxy
  * @param pageNumber 1始まりのページ番号
- * @param scale レンダリングスケール (デフォルト 2.0 で高解像度化)
+ * @param scaleOrOptions レンダリングスケールまたはオプション
  */
-export async function renderPdfPage(pdfDoc: any, pageNumber: number, scale: number = 2.0): Promise<RenderedPdfPage> {
+export async function renderPdfPage(
+  pdfDoc: any,
+  pageNumber: number,
+  scaleOrOptions: number | RenderPdfPageOptions = 2.0
+): Promise<RenderedPdfPage> {
   if (!pdfDoc || pageNumber < 1 || pageNumber > pdfDoc.numPages) {
     throw new Error(`無効なページ番号です: ${pageNumber}`);
   }
+
+  const options: RenderPdfPageOptions =
+    typeof scaleOrOptions === 'number' ? { scale: scaleOrOptions } : scaleOrOptions;
+
+  const scale = options.scale ?? 2.0;
+  const backgroundColor = options.backgroundColor ?? '#ffffff';
+  const format = options.format ?? 'image/jpeg';
+  const quality = options.quality ?? 0.92;
 
   const page = await pdfDoc.getPage(pageNumber);
   const viewport = page.getViewport({ scale });
 
   const canvas = document.createElement('canvas');
   const context = canvas.getContext('2d');
+  if (!context) {
+    throw new Error('Canvas 2D コンテキストの取得に失敗しました。');
+  }
+
   canvas.width = Math.floor(viewport.width);
   canvas.height = Math.floor(viewport.height);
+
+  // 透過背景対策：下地を背景色（デフォルト白）で塗りつぶし
+  if (backgroundColor) {
+    context.fillStyle = backgroundColor;
+    context.fillRect(0, 0, canvas.width, canvas.height);
+  }
 
   const renderContext = {
     canvasContext: context,
@@ -105,10 +135,30 @@ export async function renderPdfPage(pdfDoc: any, pageNumber: number, scale: numb
 
   await page.render(renderContext).promise;
 
-  const dataUrl = canvas.toDataURL('image/png');
+  const dataUrl = canvas.toDataURL(format, quality);
+
+  const blob = await new Promise<Blob>((resolve, reject) => {
+    canvas.toBlob(
+      (b) => {
+        if (b) {
+          resolve(b);
+        } else {
+          reject(new Error('Canvas から Blob への変換に失敗しました。'));
+        }
+      },
+      format,
+      quality
+    );
+  });
+
+  // Canvas メモリの解放
+  canvas.width = 0;
+  canvas.height = 0;
+
   return {
     dataUrl,
-    width: canvas.width,
-    height: canvas.height,
+    blob,
+    width: Math.floor(viewport.width),
+    height: Math.floor(viewport.height),
   };
 }

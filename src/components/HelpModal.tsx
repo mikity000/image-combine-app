@@ -119,7 +119,7 @@ export default function HelpModal({ isOpen, onClose, currentPath }: HelpModalPro
                   <div className="help-feature-card">
                     <div className="help-card-icon"><Palette size={22} /></div>
                     <h4>ペイント</h4>
-                    <p>画像やPDF上にペン・蛍光ペン・直線スナップ・スマート塗りつぶしで書き込み・編集。</p>
+                    <p>画像やPDF上にペン・蛍光ペン・直線スナップ・3タイプ対応の塗りつぶしで書き込み・編集。</p>
                   </div>
                 </div>
 
@@ -332,12 +332,13 @@ export default function HelpModal({ isOpen, onClose, currentPath }: HelpModalPro
                       </p>
                     </div>
                     <div className="help-tool-item">
-                      <strong>🪣 バケツ塗りつぶし</strong>
-                      <p>手書き線や枠線で囲まれた閉じたエリアの内側をクリックして均一に塗りつぶします。</p>
-                    </div>
-                    <div className="help-tool-item">
-                      <strong>✨ スマート塗りつぶし</strong>
-                      <p>画像内の人物や服、物体をクリックすると、輪郭境界を自動認識してぴったり塗りつぶします。</p>
+                      <strong>🪣 塗りつぶし</strong>
+                      <p>
+                        クリックした領域を塗りつぶします。用途に応じて以下の3タイプを切り替えて利用できます：
+                        <br />・<strong>手書き線</strong>: 手書き線で囲まれた閉じたエリアの内側を塗りつぶし（背景画像は無視）
+                        <br />・<strong>画像オブジェクト</strong>: 画像内のオブジェクトをクリックして輪郭境界を自動認識して塗りつぶし（手書き線は無視）
+                        <br />・<strong>手書き＋画像</strong>: 手書き線と画像内のオブジェクトの両方を境界として認識して塗りつぶし
+                      </p>
                     </div>
                     <div className="help-tool-item">
                       <strong>🧪 スポイト</strong>

@@ -3,13 +3,14 @@ import { PAINT_CONFIG, APP_CONFIG, PDF_CONFIG, IMAGE_CONFIG } from '../constants
 import { loadPdfDocument, renderPdfPage } from '../utils/pdfRenderUtils';
 import { fileToDataUrl } from '../utils/imageUtils';
 import { convertToWebP } from '../utils/webpConverter';
-import { performFloodFill, performSmartObjectFill } from '../utils/floodFillUtils';
+import { performUnifiedFill } from '../utils/floodFillUtils';
 import { PDFDocument } from 'pdf-lib';
 import { saveAs } from 'file-saver';
 import { Point, Size } from '../types/common';
 import {
   PaintMediaType,
   PaintToolType,
+  FillMode,
   EraserMode,
   StrokeItem,
   PageHistory,
@@ -186,7 +187,8 @@ export function usePaintCanvas(): UsePaintCanvasReturn {
   const pageStrokesRef = useRef<Record<number, StrokeItem[]>>({});
 
   // 描画ツール設定
-  const [activeTool, setActiveTool] = useState<PaintToolType>('pen'); // 'pen' | 'highlighter' | 'eraser' | 'bucket' | 'smart_fill'
+  const [activeTool, setActiveTool] = useState<PaintToolType>('pen'); // 'pen' | 'highlighter' | 'eraser' | 'bucket'
+  const [fillMode, setFillMode] = useState<FillMode>('handwriting'); // 'handwriting' | 'image_object' | 'combined'
   const [eraserMode, setEraserMode] = useState<EraserMode>('pixel'); // 'pixel' | 'stroke'
   const [color, setColor] = useState<string>(PAINT_CONFIG.DEFAULT_COLOR);
   const [brushSize, setBrushSize] = useState<number>(PAINT_CONFIG.DEFAULT_BRUSH_SIZE);
@@ -608,31 +610,20 @@ export function usePaintCanvas(): UsePaintCanvasReturn {
 
     const point = getCanvasCoordinates(e);
 
-    // 塗りつぶしツール (バケツ / スマート塗りつぶし)
-    if (activeTool === 'bucket' || activeTool === 'smart_fill') {
+    // 塗りつぶしツール (バケツ: 3タイプ対応)
+    if (activeTool === 'bucket') {
       isDrawingRef.current = false;
-      const success = activeTool === 'bucket'
-        ? performFloodFill(
-            bgCanvasRef.current,
-            canvas,
-            point.x,
-            point.y,
-            color,
-            tolerance,
-            fillOpacity,
-            PAINT_CONFIG.FLOOD_FILL_EXPAND_RADIUS,
-            gapClosing as any
-          )
-        : performSmartObjectFill(
-            bgCanvasRef.current,
-            canvas,
-            point.x,
-            point.y,
-            color,
-            tolerance,
-            fillOpacity,
-            gapClosing as any
-          );
+      const success = performUnifiedFill(
+        bgCanvasRef.current,
+        canvas,
+        point.x,
+        point.y,
+        color,
+        fillMode,
+        tolerance,
+        fillOpacity,
+        gapClosing as any
+      );
 
       if (success) {
         const dataUrl = canvas.toDataURL('image/png');
@@ -697,6 +688,7 @@ export function usePaintCanvas(): UsePaintCanvasReturn {
   }, [
     mediaType,
     activeTool,
+    fillMode,
     eraserMode,
     brushSize,
     color,
@@ -721,7 +713,7 @@ export function usePaintCanvas(): UsePaintCanvasReturn {
     }
 
     if (!isDrawingRef.current) return;
-    if (activeTool === 'bucket' || activeTool === 'smart_fill') return;
+    if (activeTool === 'bucket') return;
     const canvas = paintCanvasRef.current;
     if (!canvas) return;
 
@@ -1131,6 +1123,8 @@ export function usePaintCanvas(): UsePaintCanvasReturn {
     canvasDimensions,
     activeTool,
     setActiveTool,
+    fillMode,
+    setFillMode,
     eraserMode,
     setEraserMode,
     color,
